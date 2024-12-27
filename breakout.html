@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang = "en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Breakout</title>
+	<style>
+		body {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+			background-color: white;
+			margin: 0;
+			}
+		canvas {
+			border: 1px solid black;
+		}
+	</style>
+</head>
+<body>
+	<p id="timerText" style="font-size:25px">TimerGoHere</p>
+	<p id="targetsRemaining">Targets:  </p>
+	<canvas id="breakout" width="700" height="500"></canvas>
+	<script>
+		const canvas = document.getElementById('breakout');
+		const context = canvas.getContext('2d');
+		const timerStart = Date.now()
+		
+		const paddleWidth = 100, paddleHeight = 10;
+		const ballSize = 10;
+		const targetWidth = 50; targetHeight = 50;
+		let rightArrowPressed = false, leftArrowPressed = false;
+		var gameOn = true;
+		var visibleTargets = [];
+
+		const player = {
+			x: canvas.width / 2 - paddleWidth / 2,
+			y: canvas.height - 20,
+			width: paddleWidth,
+			height: paddleHeight,
+			color: 'black',
+			dx: 7
+		};
+
+		const ball = {
+			x: canvas.width/2,
+			y: canvas.width/2,
+			size: ballSize,
+			speed: 4,
+			dx: 0,
+			dy: 4,
+			color: 'black'
+		};
+		
+		function targetBuilder(x, y, width, height){
+			this.x = x;
+			this.y = y;
+			this.width = width;
+			this.height = height;
+			this.visible = true;
+			color = "black";
+		}
+		
+		let targets = [];
+		for (let x = 0; x < 14 * targetWidth; x += targetWidth) {
+			for (let y = 0; y < 6 * targetHeight; y += targetHeight) {
+				let target = new targetBuilder(x, y, targetWidth, targetHeight);
+				targets.push(target);
+			}
+		}
+
+		function update() {
+			movePaddle();
+			moveBall();
+		}
+
+		function movePaddle() {
+			if (rightArrowPressed && player.x < canvas.width - player.width){
+				player.x += player.dx;
+			} else if (leftArrowPressed && player.x > 0){
+				player.x -= player.dx;
+			}
+		}
+		
+		function moveBall(){
+			ball.x += ball.dx;
+			ball.y += ball.dy;
+			let playerResult = playerCollision(ball, player);
+
+			if (ball.y + ball.size > canvas.height){
+				gameOn = false;
+				alert("Game Over!");
+				window.location.reload();
+			} else if(ball.y - ball.size < 0){
+				ball.dy *= -1;
+			}
+
+			if(ball.x + ball.size > canvas.width || ball.x < 0 + ball.size){
+				ball.dx *= -1;
+				//unstick from wall
+				if(ball.x + ball.size > canvas.width){
+					ball.x -= 5;
+				} else if (ball.x - ball.size < 0){
+					ball.x += 5;
+				}
+			}
+			
+			if(playerResult != 'none'){
+				ball.dy *= -1;
+				ball.dx += Number(playerResult);
+
+				//sticky fix
+				if(ball.y <= player.y){
+					ball.y -= 5
+				}
+			}
+			
+			visibleTargets.forEach(target => {
+				let targetResult = targetCollision(ball, target);
+				if(targetResult != 'none'){
+					if(targetResult == 'bottom'){
+						//avoids 'climbing' through blocks (> is downward)
+						if(ball.dy < 0){
+							ball.dy *= -1;
+						}
+					} else if(targetResult == 'top'){
+						if(ball.dy > 0){
+							ball.dy *= -1;
+						}
+					} else {
+						ball.dx *= -1;
+					}
+					target.visible = false;
+				}
+			});
+		}
+
+		function playerCollision(ball, player){
+			let playerSegment = player.width/6;
+			var collision = 'none';
+			
+			if (ball.y + ball.size >= player.y && ball.y + ball.size <= player.y + player.height){
+				if(ball.x + ball.size >= player.x && ball.x < player.x + playerSegment){
+					collision = -2;
+				} else if (ball.x >= player.x + playerSegment && ball.x < player.x + playerSegment*2){
+					collision = -1;
+				} else if (ball.x >= player.x + playerSegment*2 && ball.x < player.x + playerSegment*4){
+					collision = 0;
+				} else if (ball.x >= player.x + playerSegment*4 && ball.x < player.x + playerSegment*5){
+					collision = 1;
+				} else if (ball.x >= player.x + playerSegment*5 && ball.x - ball.size <= player.x + playerSegment*6){
+					collision = 2;
+				}
+			}
+			return(collision);
+		}
+		
+		function targetCollision(ball,target){
+    			var leftDist = (ball.x + ball.size) - target.x;
+			var rightDist = (target.x + target.width) - (ball.x - ball.size);
+			var topDist = (ball.y + ball.size) - target.y;
+			var bottomDist = (target.y + target.height) - (ball.y - ball.size);
+			var minDist = Math.min(leftDist, rightDist, topDist, bottomDist);
+			var collision = 'none';
+
+			if(minDist >= 0){
+				switch (minDist){
+					case bottomDist:
+						collision = "bottom";
+						break;
+					case topDist:
+						collision = "top";
+						break;
+					case rightDist:
+						collision = "right";
+						break;
+					case leftDist:
+						collision = "left";
+						break;
+				}
+			}
+    			return(collision);
+		}
+
+		function drawBall(x, y, size, color){
+			context.fillStyle = color;
+			context.beginPath();
+			context.arc(x, y, size, 0, Math.PI * 2);
+			context.closePath();
+			context.fill();
+		}
+		
+		function drawRect(x, y, w, h, color){
+			context.fillStyle = color;
+			context.fillRect(x, y, w, h);
+		};
+
+		function render(){
+			drawRect(0, 0, canvas.width, canvas.height, 'white');
+			drawRect(player.x, player.y, player.width, player.height, player.color);
+			drawBall(ball.x, ball.y, ball.size, ball.color);
+			visibleTargets.forEach(target => {
+				drawRect(target.x, target.y, target.width, target.height, target.color);
+			});
+		}
+		
+		function gameLoop() {
+			update();
+			render();
+			visibleTargets = targets.filter(target => target.visible);
+			document.getElementById("timerText").innerHTML = timeElapsed();
+			document.getElementById("targetsRemaining").innerHTML = "Targets: " + visibleTargets.length;
+			//console.log(visibleTargets.length);
+			if (visibleTargets.length <= 0){
+				gameOn = false;
+				alert("You win!");
+			}
+			if (gameOn){
+				requestAnimationFrame(gameLoop);
+			}
+		}
+
+		function timeElapsed(){
+			totalTime = Date.now() - timerStart;
+			var minutes = Math.floor(totalTime / 60000);
+			var seconds = Math.floor((totalTime % 60000) / 1000);
+			var milliseconds = Math.floor((totalTime % 1000) / 10);
+			var returnTime = minutes.toString() + ":" + seconds.toString().padStart(2, '0') + ":" + milliseconds.toString().padStart(2, '0');
+			return returnTime;
+		}
+
+		document.addEventListener('keydown', (event) => {
+			if (event.key === 'ArrowRight') {
+				rightArrowPressed = true;
+			} else if (event.key === 'ArrowLeft') {
+				leftArrowPressed = true;
+			}
+		});
+		
+		document.addEventListener('keyup', (event) => {
+			if (event.key === 'ArrowRight') {
+				rightArrowPressed = false;
+			} else if (event.key === 'ArrowLeft') {
+				leftArrowPressed = false;
+			}
+		});
+		
+		gameLoop();
+	</script>
+</body>
+</html>
